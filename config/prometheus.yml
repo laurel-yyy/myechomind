@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "myechomind"
+    metrics_path: /metrics
+    static_configs:
+      # host.docker.internal lets a container reach the app running on the host
+      - targets: ["host.docker.internal:8000"]

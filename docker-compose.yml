@@ -1,0 +1,75 @@
+services:
+  # ---- Working memory & session state ----
+  redis:
+    image: redis:7-alpine
+    container_name: myechomind-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+
+  # ---- Vector store: RAG knowledge base, episodic memory, user profile ----
+  chromadb:
+    image: chromadb/chroma:0.5.20
+    container_name: myechomind-chromadb
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+
+  # ---- Metrics scraping ----
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: myechomind-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom-data:/prometheus
+
+  # ---- Reverse proxy (opt-in; enable when app container is used) ----
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: myechomind-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
+    profiles: ["with-nginx"]
+
+  # ---- Application (opt-in; for local dev, run uvicorn natively instead) ----
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: myechomind:latest
+    container_name: myechomind-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - REDIS_HOST=redis
+      - CHROMA_HOST=chromadb
+    depends_on:
+      - redis
+      - chromadb
+    volumes:
+      - ./skills:/app/skills
+      - ./data:/app/data
+      - ./logs:/app/logs
+    profiles: ["with-app"]
+
+volumes:
+  redis-data:
+  chroma-data:
+  prom-data:

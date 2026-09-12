@@ -1,0 +1,32 @@
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+pydantic>=2.7,<3.0
+pydantic-settings>=2.4,<3.0
+python-dotenv>=1.0,<2.0
+python-multipart>=0.0.9,<1.0
+
+# LLM (Anthropic-compatible; also works for DeepSeek via base_url override)
+anthropic>=0.34,<1.0
+httpx>=0.27,<1.0
+
+# Storage
+# chromadb-client is the HTTP-only client (no native hnswlib); pair with the
+# ChromaDB docker service. Use the full `chromadb` package only if you need
+# CHROMA_MODE=local (PersistentClient) — that requires MSVC build tools on Windows.
+chromadb-client>=0.5,<1.0
+redis>=5.0,<6.0
+fakeredis>=2.24,<3.0
+
+# Numeric / retrieval
+numpy>=1.26,<3.0
+scikit-learn>=1.4,<2.0
+
+# Observability
+prometheus-client>=0.20,<1.0
+
+# Optional: real embeddings (uncomment when switching EMBEDDING_MODE=sentence-transformers)
+# sentence-transformers>=3.0,<4.0
+
+# Dev / test
+pytest>=8.0,<9.0
+pytest-asyncio>=0.23,<1.0
