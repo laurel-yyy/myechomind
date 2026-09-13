@@ -158,19 +158,28 @@ class MockLLMClient(LLMClient):
         candidates: list[dict[str, Any]],
         context: str = "",
     ) -> dict[str, Any]:
+        # Approximate what a real LLM does: strongly reward candidate keywords
+        # that appear verbatim in the message, and use description-token overlap
+        # only as a weak tiebreaker. This keeps single-word high-signal intents
+        # (e.g. "refund") from losing to broader intents that happen to share a
+        # generic token (e.g. "order").
+        user_lower = (user_message or "").lower()
         user_tokens = _tokenize(user_message)
         best_intent = candidates[0] if candidates else {"intent": "unknown", "group": "general"}
         best_score = 0.0
         scores: list[tuple[float, dict[str, Any]]] = []
         for c in candidates:
-            cand_tokens = _tokenize(" ".join(c.get("keywords", [])) + " " + c.get("description", ""))
-            score = _overlap_score(user_tokens, cand_tokens)
+            keywords = [kw for kw in c.get("keywords", []) if kw]
+            kw_hits = sum(1 for kw in keywords if kw.lower() in user_lower)
+            kw_score = kw_hits / len(keywords) if keywords else 0.0
+            desc_score = _overlap_score(user_tokens, _tokenize(c.get("description", "")))
+            score = kw_score * 0.7 + desc_score * 0.3
             scores.append((score, c))
             if score > best_score:
                 best_score = score
                 best_intent = c
 
-        # Confidence: overlap plus a small bump if score >> runner-up
+        # Confidence: raw score + margin over runner-up.
         scores.sort(key=lambda x: x[0], reverse=True)
         runner_up = scores[1][0] if len(scores) > 1 else 0.0
         margin = max(0.0, best_score - runner_up)
