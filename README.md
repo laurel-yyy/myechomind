@@ -54,6 +54,21 @@ Toggle via `.env`; no business code changes required.
 | Redis      | fakeredis (in-mem)  | Real Redis                 |
 | ChromaDB   | Local Persistent    | HTTP server                |
 
+## API surface
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET` | `/health` | Runtime, knowledge-base, Skills, and tool status |
+| `POST` | `/chat` | Full memory → intent → RAG → multi-agent → persistence pipeline |
+| `POST` | `/search` | Governed RAG search with rewrite and rerank |
+| `POST` | `/knowledge/add` | Add one or more knowledge documents |
+| `POST` | `/knowledge/upload` | Upload a UTF-8 `.txt`, `.md`, or `.json` knowledge document |
+| `GET` | `/knowledge/stats` | Knowledge-base document count |
+| `GET` / `POST` | `/skills`, `/skills/reload` | Inspect and hot-reload Skills |
+| `GET` | `/monitor` | Component health, alerts, routing penalties, and tool counters |
+| `GET` | `/metrics` | Prometheus metrics |
+| `POST` | `/eval/run` | End-to-end evaluation and baseline regression checks |
+
 ## Docker Compose profiles
 
 - Default services (no profile): `redis`, `chromadb`, `prometheus`

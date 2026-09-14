@@ -187,6 +187,18 @@ class Evaluator:
         return regressions
 
 
+DEFAULT_EVALUATION_CASES: list[EvaluationCase] = [
+    EvaluationCase("greeting", "Hello there", "greeting", "general"),
+    EvaluationCase("refund", "I need a refund for order AB12345678", "refund", "billing"),
+    EvaluationCase("login", "I get 401 when I log in", "login_failure", "technical"),
+    EvaluationCase("crash", "The mobile app crashes when I open it", "crash", "technical"),
+    EvaluationCase("duplicate", "I was charged twice for the same order", "duplicate_charge", "billing"),
+    EvaluationCase("invoice", "Please send my invoice", "invoice", "billing"),
+    EvaluationCase("logistics", "When will my package arrive?", "logistics", "general"),
+    EvaluationCase("handoff", "Transfer me to a human agent", "human_handoff", "escalation"),
+]
+
+
 def _ratio(numerator: int, denominator: int) -> float:
     return round(numerator / denominator if denominator else 0.0, 4)
 

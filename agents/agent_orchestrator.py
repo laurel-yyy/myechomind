@@ -135,9 +135,16 @@ class AgentOrchestrator:
         *,
         memory_context: dict[str, Any] | None = None,
         knowledge_docs: list[dict[str, Any]] | None = None,
+        intent_result: IntentResult | None = None,
+        routing_decision: RoutingDecision | None = None,
     ) -> OrchestrationResult:
         """Route, invoke selected agents, and merge their specialist responses."""
-        intent, routing = self.route(user_message, self._context_text(memory_context or {}))
+        if (intent_result is None) != (routing_decision is None):
+            raise ValueError("intent_result and routing_decision must be supplied together")
+        if intent_result is None or routing_decision is None:
+            intent, routing = self.route(user_message, self._context_text(memory_context or {}))
+        else:
+            intent, routing = intent_result, routing_decision
         selected = [routing.primary_agent, *routing.supporting_agents]
         kwargs = {
             "intent": intent.intent,

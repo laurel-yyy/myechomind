@@ -1,5 +1,5 @@
 """End-to-end evaluation and regression-detection utilities."""
 
-from evaluation.evaluator import EvaluationCase, EvaluationReport, Evaluator
+from evaluation.evaluator import DEFAULT_EVALUATION_CASES, EvaluationCase, EvaluationReport, Evaluator
 
-__all__ = ["EvaluationCase", "EvaluationReport", "Evaluator"]
+__all__ = ["DEFAULT_EVALUATION_CASES", "EvaluationCase", "EvaluationReport", "Evaluator"]
