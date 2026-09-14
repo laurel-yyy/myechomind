@@ -16,6 +16,15 @@ __all__ = [
     "all_groups",
     "get_spec",
 ]
+from core.embedding_client import EmbeddingClient, get_embedding_client
+from core.llm_client import LLMClient, get_llm_client
 from core.skill_loader import Skill, SkillManager
 
-__all__ = ["Skill", "SkillManager"]
+__all__ = [
+    "EmbeddingClient",
+    "LLMClient",
+    "Skill",
+    "SkillManager",
+    "get_embedding_client",
+    "get_llm_client",
+]
