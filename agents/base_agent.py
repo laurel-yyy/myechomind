@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from core.llm_client import LLMClient, get_llm_client
 from core.skill_loader import SkillManager
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -17,6 +20,7 @@ class AgentResponse:
     answer: str
     matched_skills: list[str] = field(default_factory=list)
     system_prompt: str = ""
+    degraded: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -56,17 +60,31 @@ class BaseAgent:
             knowledge_docs=knowledge_docs or [],
             skill_prompt=skill_prompt,
         )
-        answer = self._llm.chat(
-            system=system,
-            messages=[{"role": "user", "content": user_message}],
-            max_tokens=700,
-            temperature=0.2,
-        )
+        degraded = False
+        try:
+            answer = self._llm.chat(
+                system=system,
+                messages=[{"role": "user", "content": user_message}],
+                max_tokens=700,
+                temperature=0.2,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Preserve the /chat SLA: any LLM transport / auth / rate-limit error
+            # turns into a degraded reply so downstream memory writes still run
+            # and the monitor sees a documented failure.
+            logger.warning("Agent %s: LLM chat failed, returning degraded reply: %s", self.agent_type, exc)
+            degraded = True
+            answer = (
+                f"[{self.agent_type} agent] The upstream language model is temporarily "
+                f"unavailable ({type(exc).__name__}). Please retry shortly; the rest of "
+                "the pipeline (intent detection, knowledge retrieval, routing) is still working."
+            )
         return AgentResponse(
             agent_type=self.agent_type,
             answer=answer,
             matched_skills=matched_skills,
             system_prompt=system,
+            degraded=degraded,
         )
 
     def _build_system_prompt(

@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_base_url: str = "https://api.anthropic.com"
     anthropic_model: str = "claude-3-5-sonnet-20241022"
+    # Required only when the API key is org-scoped rather than workspace-scoped.
+    # Sent as the `anthropic-workspace-id` header on every request when non-empty.
+    anthropic_workspace_id: str = ""
 
     # ---- Embedding ----
     embedding_mode: Literal["mock", "sentence-transformers"] = "mock"

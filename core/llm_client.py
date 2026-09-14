@@ -277,9 +277,14 @@ class RealLLMClient(LLMClient):
             raise RuntimeError(
                 "LLM_MODE=real requires ANTHROPIC_API_KEY to be set in .env"
             )
+        default_headers: dict[str, str] = {}
+        if settings.anthropic_workspace_id:
+            # Required when the key is org-scoped instead of workspace-scoped.
+            default_headers["anthropic-workspace-id"] = settings.anthropic_workspace_id
         self._client = Anthropic(
             api_key=settings.anthropic_api_key,
             base_url=settings.anthropic_base_url,
+            default_headers=default_headers or None,
         )
         self._model = settings.anthropic_model
 
@@ -309,12 +314,18 @@ class RealLLMClient(LLMClient):
 
     # -------- shared JSON prompt helper --------
     def _ask_json(self, system: str, user: str, max_tokens: int = 512) -> dict[str, Any]:
-        raw = self.chat(
-            system=system,
-            messages=[{"role": "user", "content": user}],
-            max_tokens=max_tokens,
-            temperature=0.0,
-        )
+        # An empty return signals to the caller to fall back to the mock path,
+        # so any API or transport error must degrade instead of raising.
+        try:
+            raw = self.chat(
+                system=system,
+                messages=[{"role": "user", "content": user}],
+                max_tokens=max_tokens,
+                temperature=0.0,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("LLM _ask_json failed, falling back to mock: %s", exc)
+            return {}
         # Try direct parse first, then extract the first {...} block.
         try:
             return json.loads(raw)
