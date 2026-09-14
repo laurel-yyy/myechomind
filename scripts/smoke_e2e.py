@@ -17,7 +17,9 @@ from pathlib import Path
 import httpx
 
 BASE = "http://localhost:8000"
-TIMEOUT = 60.0
+# Long enough to cover real-mode /eval/run, which invokes ~3 LLM roundtrips
+# per case across the default 8-case battery. Mock mode returns in <1s.
+TIMEOUT = 300.0
 
 
 def section(title: str) -> None:
