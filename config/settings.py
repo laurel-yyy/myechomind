@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     monitor_success_rate_threshold: float = 0.90
     monitor_latency_ms_threshold: int = 3000
     monitor_anomaly_zscore: float = 2.5
+    monitor_window_size: int = 200
+    monitor_min_samples: int = 5
+    monitor_max_routing_penalty: float = 0.60
 
     # ---- Paths ----
     skills_dir: str = "./skills"

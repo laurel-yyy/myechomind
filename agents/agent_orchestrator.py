@@ -5,6 +5,8 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from typing import Any
+from time import perf_counter
+from typing import TYPE_CHECKING
 
 from agents.base_agent import AgentResponse, BaseAgent
 from agents.billing_agent import BillingAgent
@@ -13,6 +15,9 @@ from agents.technical_agent import TechnicalAgent
 from core.intent_recognizer import IntentRecognizer, IntentResult
 from core.intents import INTENT_CATALOG
 from core.skill_loader import SkillManager
+
+if TYPE_CHECKING:
+    from monitor.performance_monitor import PerformanceMonitor
 
 
 @dataclass
@@ -27,6 +32,7 @@ class RoutingDecision:
     routing_reason: str
     escalation_requested: bool = False
     domain_signals: dict[str, float] = field(default_factory=dict)
+    monitor_penalties: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -69,6 +75,7 @@ class AgentOrchestrator:
         recognizer: IntentRecognizer | None = None,
         skill_manager: SkillManager | None = None,
         agents: dict[str, BaseAgent] | None = None,
+        monitor: PerformanceMonitor | None = None,
     ) -> None:
         self._recognizer = recognizer or IntentRecognizer()
         skills = skill_manager or SkillManager()
@@ -77,16 +84,25 @@ class AgentOrchestrator:
             "technical": TechnicalAgent(skill_manager=skills),
             "billing": BillingAgent(skill_manager=skills),
         }
+        self._monitor = monitor
 
     def route(self, user_message: str, context: str = "") -> tuple[IntentResult, RoutingDecision]:
         """Recognize intent and produce a deterministic structured route."""
         intent = self._recognizer.recognize(user_message, context)
         primary_agent = self._AGENT_BY_GROUP[intent.group]
         domain_signals = self._domain_signals(user_message)
+        monitor_penalties = {
+            agent: self._monitor.routing_penalty(agent) if self._monitor else 0.0
+            for agent in self._agents
+        }
         active_domains = [group for group, score in domain_signals.items() if score > 0.0]
         compound_override = False
         if len(active_domains) >= 2:
-            strongest_group = max(active_domains, key=domain_signals.get)
+            strongest_group = max(
+                active_domains,
+                key=lambda group: domain_signals[group]
+                * (1.0 - monitor_penalties[self._AGENT_BY_GROUP[group]]),
+            )
             strongest_agent = self._AGENT_BY_GROUP[strongest_group]
             if strongest_agent != primary_agent:
                 # A single intent classifier necessarily returns one label. For a
@@ -110,6 +126,7 @@ class AgentOrchestrator:
             routing_reason=reason,
             escalation_requested=escalation,
             domain_signals=domain_signals,
+            monitor_penalties=monitor_penalties,
         )
 
     def handle(
@@ -130,7 +147,9 @@ class AgentOrchestrator:
         }
         with ThreadPoolExecutor(max_workers=len(selected)) as executor:
             futures = {
-                agent_name: executor.submit(self._agents[agent_name].respond, user_message, **kwargs)
+                agent_name: executor.submit(
+                    self._invoke_agent, agent_name, user_message, **kwargs
+                )
                 for agent_name in selected
             }
             primary = futures[routing.primary_agent].result()
@@ -142,6 +161,22 @@ class AgentOrchestrator:
             primary_response=primary,
             supporting_responses=supporting,
         )
+
+    def _invoke_agent(self, agent_name: str, user_message: str, **kwargs: Any) -> AgentResponse:
+        started = perf_counter()
+        try:
+            response = self._agents[agent_name].respond(user_message, **kwargs)
+        except Exception:
+            if self._monitor:
+                self._monitor.record_agent(
+                    agent_name, success=False, latency_ms=(perf_counter() - started) * 1000
+                )
+            raise
+        if self._monitor:
+            self._monitor.record_agent(
+                agent_name, success=True, latency_ms=(perf_counter() - started) * 1000
+            )
+        return response
 
     @staticmethod
     def _domain_signals(user_message: str) -> dict[str, float]:

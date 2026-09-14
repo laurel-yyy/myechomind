@@ -36,11 +36,14 @@ import time
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from monitor.performance_monitor import PerformanceMonitor
 
 
 # =====================================================================
@@ -171,12 +174,18 @@ class CircuitBreaker:
 # Tool manager
 # =====================================================================
 class ToolManager:
-    def __init__(self, tools: list[Tool] | None = None) -> None:
+    def __init__(
+        self,
+        tools: list[Tool] | None = None,
+        *,
+        monitor: PerformanceMonitor | None = None,
+    ) -> None:
         self._tools: dict[str, Tool] = {}
         self._breakers: dict[str, CircuitBreaker] = {}
         self._cache = TTLCache(settings.tool_cache_ttl)
         # Simple counters for /monitor later.
         self._counters: dict[str, dict[str, int]] = {}
+        self._monitor = monitor
         for t in tools or []:
             self.register(t)
 
@@ -197,6 +206,7 @@ class ToolManager:
     def execute(self, tool_name: str, params: dict[str, Any]) -> ToolResult:
         if tool_name not in self._tools:
             return ToolResult(ok=False, error=f"unknown tool: {tool_name}")
+        started = time.perf_counter()
         tool = self._tools[tool_name]
         breaker = self._breakers[tool_name]
         counters = self._counters[tool_name]
@@ -208,7 +218,9 @@ class ToolManager:
         if cached is not None:
             counters["cache_hits"] += 1
             counters["hits"] += 1
-            return _clone_result(cached, extra_meta={"cache_hit": True})
+            result = _clone_result(cached, extra_meta={"cache_hit": True})
+            self._record_monitor(tool_name, result, started)
+            return result
 
         # ---- Breaker ----
         if breaker.should_reject():
@@ -217,6 +229,7 @@ class ToolManager:
             result = tool.fallback(params, RuntimeError("circuit_open"))
             result.meta.setdefault("cache_hit", False)
             result.meta.setdefault("breaker", "open")
+            self._record_monitor(tool_name, result, started)
             return result
 
         # ---- Execute with timeout ----
@@ -233,6 +246,7 @@ class ToolManager:
             )
             fb = tool.fallback(params, e)
             fb.meta.update({"cache_hit": False, "reason": "timeout"})
+            self._record_monitor(tool_name, fb, started)
             return fb
         except Exception as e:  # noqa: BLE001
             counters["failures"] += 1
@@ -240,6 +254,7 @@ class ToolManager:
             logger.exception("Tool %s raised", tool_name)
             fb = tool.fallback(params, e)
             fb.meta.update({"cache_hit": False, "reason": "exception"})
+            self._record_monitor(tool_name, fb, started)
             return fb
 
         elapsed_ms = int((time.time() - start) * 1000)
@@ -254,7 +269,18 @@ class ToolManager:
             counters["failures"] += 1
             breaker.record_failure()
 
+        self._record_monitor(tool_name, result, started)
         return result
+
+    def _record_monitor(self, tool_name: str, result: ToolResult, started: float) -> None:
+        if self._monitor is None:
+            return
+        self._monitor.record_tool(
+            tool_name,
+            success=result.ok,
+            latency_ms=(time.perf_counter() - started) * 1000,
+            degraded=result.degraded,
+        )
 
     # ------------------------------------------------------------------
     # Introspection (used by /monitor and /health later)
