@@ -16,3 +16,6 @@ __all__ = [
     "all_groups",
     "get_spec",
 ]
+from core.skill_loader import Skill, SkillManager
+
+__all__ = ["Skill", "SkillManager"]

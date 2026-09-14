@@ -73,6 +73,8 @@ class Settings(BaseSettings):
 
     # ---- Paths ----
     skills_dir: str = "./skills"
+    skills_reload_interval_sec: int = 30
+    skills_max_prompt_chars: int = 12_000
     eval_baseline_path: str = "./data/eval/baseline.json"
     logs_dir: str = "./logs"
 
